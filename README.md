@@ -1,4 +1,43 @@
-> **Self-hosted headless Relay fork:** Based on upstream `v1.4.221`. See [setup, authentication and upgrade verification](docs/selfhost-relay.md). Branch `selfhost-relay` contains the fork changes; `main` is the upstream baseline.
+> **Self-hosted headless Relay fork:** Based on upstream `v1.4.221`. Branch `selfhost-relay` contains the fork changes; `main` is the upstream baseline.
+
+## 安装带 Relay 补丁的 headless server
+
+提供 **Linux x86_64 / ARM64** 安装包（不支持 32 位 ARM）。安装脚本自动选择架构，支持 Ubuntu 22.04+、Debian 12+，以及启用了 systemd 的 WSL2。
+
+```bash
+curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.221-relay.1/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
+sudo bash /tmp/install-orca-relay.sh
+```
+
+首次不带参数只安装程序。连接你自己的 Relay 并启动服务：
+
+```bash
+sudo bash /tmp/install-orca-relay.sh \
+  --user "$USER" \
+  --relay https://YOUR_RELAY_IP:8443 \
+  --password-file /path/to/private/relay-password \
+  --ca /path/to/relay-ca.crt
+```
+
+`--password-file` 指向只含 Relay 密码的私有文件；公有 CA 签发的证书不需要 `--ca`。不要把密码写入命令行或提交到 GitHub。服务以 `--user` 指定的现有用户运行，拥有该用户的宿主机文件和进程权限；默认使用 sudo 的调用者，直接以 root 安装则使用 root。它不在容器中运行。AI CLI 及登录凭据仍需存在于该用户的环境中；自定义 CLI 路径可在生成的 `headless.env` 中调整 `PATH`。
+
+- 安装位置：`/opt/orca-selfhost/current`，版本及源码提交见 `BUILD-INFO.json`。
+- 服务：`orca-selfhost.service`，开机启动，每次启动自动登录 Relay。
+- 配置与配对文件：服务用户的 `~/.config/orca-selfhost/`。
+- 持久化数据：服务用户的 `~/.local/share/orca-selfhost/`，升级保留。
+- 网络：headless 主动连接 Relay 的 HTTPS/WSS 端口，无隧道或 bridge。原生直接访问端口 6768 仍会监听；只需 Relay 时请在主机防火墙阻止该端口的外部入站。
+
+```bash
+sudo systemctl status orca-selfhost.service
+# 生成新的限时手机邀请，写入服务用户的 pairing.json
+sudo systemctl kill --kill-who=main --signal=SIGUSR2 orca-selfhost.service
+```
+
+手机仍需扫码添加这台新主机；连接 Relay 不会自动把所有服务器添加到手机。`pairing.json` 中的 `pairing.pairingUrl` 可转成二维码，属于私有凭据。
+
+安装包保留经过 SHA-256 校验的同版本官方 Electron、前端及原生依赖，**完整主进程及其 chunks 从本 fork 源码重新编译**，不是对旧压缩代码做文本替换。安装脚本校验下载包和主进程文件，并将更新源指向本 fork。使用本安装脚本升级，不使用官方桌面更新器。
+
+[下载发行包](https://github.com/ocss884/orca/releases/tag/v1.4.221-relay.1) · [认证、验证、构建及升级说明](docs/selfhost-relay.md)
 
 <h1 align="center">
   <a href="https://onOrca.dev"><img src="resources/build/icon.png" alt="Orca" width="64" valign="middle" /></a> Orca
