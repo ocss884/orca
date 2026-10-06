@@ -4,6 +4,7 @@ import { app } from 'electron'
 import { resolveAdvertisedPairingEndpoint } from '../runtime/pairing-endpoint'
 import { notifyServeSupervisorReady } from '../serve-update-handoff'
 import { mainProcessState as state } from './main-process-state'
+import { createServePairingOffer, persistServeRelayPairing } from './serve-relay-pairing'
 import { getServeOptions, type ServeOptions } from './serve-options'
 
 export { getServeOptions, type ServeOptions }
@@ -54,17 +55,8 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
   const advertised = boundEndpoint
     ? resolveAdvertisedPairingEndpoint(boundEndpoint, options.pairingAddress)
     : null
-  const pairing = options.noPairing
-    ? ({
-        available: false,
-        reason: 'disabled_by_operator',
-        guidance: 'Restart without --no-pairing to create a client pairing offer.'
-      } as const)
-    : runtimeRpc.createPairingOffer({
-        address: options.pairingAddress,
-        name: `${options.mobilePairing ? 'Mobile' : 'CLI'} ${new Date().toLocaleDateString()}`,
-        scope: options.mobilePairing ? 'mobile' : 'runtime'
-      })
+  const pairing = await createServePairingOffer(runtimeRpc, options)
+  persistServeRelayPairing(pairing, runtime.getRuntimeId())
   const pairingQr =
     pairing.available && options.mobilePairing
       ? await renderTerminalPairingQr(pairing.pairingUrl)

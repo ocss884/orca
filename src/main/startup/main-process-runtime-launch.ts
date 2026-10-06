@@ -1,7 +1,8 @@
-import { app, powerMonitor, type BrowserWindow } from 'electron'
+import { app, type BrowserWindow } from 'electron'
 import { is } from '@electron-toolkit/utils'
-import { getOrcaCloudAuthConfig } from '../orca-profiles/profile-cloud-auth-config'
-import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
+import { importServeRelaySession } from './serve-relay-session'
+import { registerServeRelayPairingRefresh } from './serve-relay-pairing'
+import { startDesktopRelayService } from './desktop-relay-startup'
 import {
   getCanonicalUserDataPath,
   migrateMobilePairingDataToCanonicalUserDataPath
@@ -13,8 +14,7 @@ import { LocalPtyProvider } from '../providers/local-pty-provider'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
 import { OffscreenBrowserBackend } from '../browser/offscreen-browser-backend'
 import { browserManager } from '../browser/browser-manager'
-import { getDesktopRelayStatus, publishDesktopRelayStatus } from './main-process-relay-status'
-import { DesktopRelayService } from '../runtime/relay/desktop-relay-service'
+import { getDesktopRelayStatus } from './main-process-relay-status'
 import { getServeOptions, getBundledWebClientRoot, printServeReady } from './main-process-serve'
 import {
   bindTerminalRuntimeStartupServices,
@@ -128,6 +128,7 @@ async function launchServeMode(
   // Why here: headless serve has no window to unblock, so keep the persisted proxy strictly
   // ahead of every fetcher this phase can reach (relay, CLI install, RPC clients).
   await state.initialProxyApplicationReady
+  await importServeRelaySession()
   // Why: give managed WSL launchers a brief chance to migrate before headless PTYs go live, without slow repairs withholding all RPC readiness.
   logStartupMilestone('wsl-cli-barrier-start')
   await state.managedWslCliStartupBarrierReady
@@ -214,43 +215,7 @@ async function launchServeMode(
   void scheduleAllPendingHistoryTreeRemovals()
   emitServeBrowserIdentityActionLine(getBrowserIdentityModeStatus())
   await printServeReady(serveOptions)
-}
-
-// Why shared: Relay pairing is the only pairing path a headless `orca serve` host can offer a
-// phone on another network, so both launch modes install the provider. Requires the persisted
-// proxy already applied and runtimeRpc.start() to have run — the constructor reads the E2EE
-// keypair and mobile socket wiring that start() creates.
-function startDesktopRelayService(runtimeRpc: OrcaRuntimeRpcServer): void {
-  const cloudAuth = getOrcaCloudAuthConfig()
-  if (!cloudAuth.configured) {
-    return
-  }
-  try {
-    const relayService = new DesktopRelayService({
-      authConfig: cloudAuth.config,
-      userDataPath: getProfileUserDataPath(),
-      appVersion: app.getVersion(),
-      runtimeRpc,
-      onStatus: publishDesktopRelayStatus
-    })
-    state.desktopRelayService = relayService
-    runtimeRpc.setMobileRelayPairingProvider({
-      createPairingRelay: (relayDeviceId) => relayService.createPairingRelay(relayDeviceId),
-      onDeviceRevokeQueued: (item) => relayService.onDeviceRevokeQueued(item),
-      onDemandStateChanged: () => relayService.demandStateChanged(),
-      getEndpoints: (context, params) => relayService.getEndpoints(context, params),
-      provisionRelay: (context, params) => relayService.provisionRelay(context, params)
-    })
-    relayService.start()
-    // Why: sleeping past relay-token expiry kills the broker with no retry
-    // timer; resume is the moment that state becomes recoverable.
-    powerMonitor.on('resume', () => state.desktopRelayService?.ensureLive())
-  } catch (error) {
-    console.warn(
-      '[relay] Desktop relay startup unavailable:',
-      error instanceof Error ? error.message : String(error)
-    )
-  }
+  registerServeRelayPairingRefresh(runtimeRpc, serveOptions, runtime.getRuntimeId())
 }
 
 async function launchDesktopMode(
