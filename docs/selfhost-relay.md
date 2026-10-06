@@ -144,11 +144,72 @@ Before deploying an upgrade:
 6. Switch `/opt/orca/current` only to an accepted version. If reverting across a profile
    migration, restore the matching stopped-service data snapshot as well as the program.
 
-Keep Relay and compatible auth deployments versioned independently. This fork currently
-provides source patches and focused checks, not an automated release/deployment pipeline.
+Keep Relay and compatible auth deployments versioned independently.
 
-This is currently a source fork, not a signed binary release. Upstream packaging and
-updater metadata still reference the upstream release infrastructure; configure a fork
-release feed before distributing packages, and do not use the official in-app updater
-on a patched installation. The deployed 1.4.220 proof of concept is separate from this
-1.4.221 source branch; a new packaged build still needs Linux/iPhone acceptance testing.
+## Linux binary installation and packaging
+
+See the [README](../README.md) for the pinned installer. Release `v1.4.221-relay.1`
+provides Linux amd64 and arm64 tarballs, a SHA256SUMS file, and an installer. These
+are headless packages for Debian/Ubuntu, not signed desktop installers or 32-bit ARM builds.
+The installer satisfies the upstream Debian runtime dependencies and installs audio
+libraries needed by Electron even with no display. A system Node installation is not
+required: the login helper uses the bundled Electron's Node mode.
+
+The release reuses **exactly v1.4.221** official runtime/native dependencies and renderer,
+then replaces the entire main-process bundle, including every chunk, with a build from
+this fork. `package-selfhost-relay.py` pins each official Debian package's SHA-256,
+checks its architecture and ASAR package version, and rewrites the main entries to the
+new unpacked bundle while preserving offsets for the other ASAR contents. It records
+source commit, upstream digest and individual compiled JS hashes in `BUILD-INFO.json`.
+The ASAR and shipped helper files are hashed as well. No credentials or host profile are included. The updater feed points to this fork;
+headless upgrades are performed with the installer, not the desktop updater.
+
+Build on a machine with Node 24 and the repository's pinned pnpm:
+
+```sh
+pnpm install --frozen-lockfile --ignore-scripts
+ORCA_ELECTRON_VITE_TARGET=main node config/scripts/run-electron-vite-build.mjs --config config/electron-vite-target.config.cts
+```
+
+On Linux with `dpkg-deb`, using the same checkout and the built `out/main/`:
+
+```sh
+python3 config/scripts/package-selfhost-relay.py \
+  --deb /path/to/orca-ide_1.4.221_amd64.deb --arch amd64 \
+  --source-commit "$(git rev-parse HEAD)" --output release
+# Repeat with the official arm64 Debian package and --arch arm64.
+(cd release && sha256sum orca-headless-*.tar.gz > SHA256SUMS)
+```
+
+Do not change just the pinned base version: an upgrade must build main from that same
+upstream version plus the fork commits, update the official digests and release name,
+and repeat packaged validation on supported architectures before publishing.
+
+The installer creates `orca-selfhost.service`, distinct from older hand-built services
+named `orca-headless.service`. It does not migrate an old profile or stop another
+service using port 6768. Resolve any existing port/profile conflict before installation.
+`--user` defaults to the sudo caller (or current account if already root); root launches
+need Chromium's `--no-sandbox`, which the wrapper adds only for UID 0. The service gives Xvfb its own `/tmp/.X11-unix` mount, avoiding WSLg's read-only socket directory without changing the host mount. It has
+that user's normal host privileges and no disk read/write throttling. Systemd cannot
+start a WSL distribution while Windows has it shut down; the service starts when the
+systemd-enabled distribution starts.
+
+On an upgrade the installer retains the old version directory and records its path in
+`/opt/orca-selfhost/previous-version`. Stop the service and back up the private config
+and persistent profile **before upgrading**. A rollback may need the matching profile
+snapshot, not just an old binary. Existing config is reused if `--relay` is omitted;
+providing Relay options again creates a new configuration and backs up the previous env
+file. Runtime identity and device keys belong in the persistent profile, not the package.
+
+The original v1.4.220 deployment is separate and remains unchanged by publishing this
+release. A protocol probe is not a substitute for the user's real iPhone acceptance.
+
+### Release validation
+
+For `v1.4.221-relay.1`: the 38 focused TypeScript tests and four packaging/checksum
+tests pass; the shell scripts pass ShellCheck. The amd64 package was installed in
+Ubuntu 24.04 WSL2, authenticated against a self-hosted Relay over verified TLS, and
+passed mobile-protocol E2EE, device authentication, RPC and resume-credential reconnect
+after service restart. The arm64 package started to `orca_server_ready` in a native
+ARM64 Ubuntu 24.04 container. ARM64 Relay end-to-end and a real iPhone connection to
+this new WSL host are not included in those results.
