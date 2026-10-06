@@ -1,3 +1,4 @@
+import { createServePairingOffer, persistServeRelayPairing } from './serve-relay-pairing'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
@@ -29,7 +30,11 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
   await state.serveReadinessPublisher.publish(
     {
       runtimeId: runtime.getRuntimeId(),
-      ...(await buildServePairingReadiness(options, runtimeRpc)),
+      ...(await buildServePairingReadiness(options, runtimeRpc, async () => {
+        const pairing = await createServePairingOffer(runtimeRpc, options)
+        persistServeRelayPairing(pairing, runtime.getRuntimeId())
+        return pairing
+      })),
       // Why: the WSL reconciliation barrier fails open, so 'pending' warns a WSL PTY launch may still race a repair.
       managedWslCliReconciliation: state.managedWslCliReconciliationStatus
     },

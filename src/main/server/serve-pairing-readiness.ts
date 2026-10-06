@@ -11,13 +11,14 @@ export async function buildServePairingReadiness(
     mobilePairing?: boolean
     grantDesktopControl?: boolean
   },
-  rpc: Pick<OrcaRuntimeRpcServer, 'getWebSocketEndpoint' | 'createPairingOffer'>
+  rpc: Pick<OrcaRuntimeRpcServer, 'getWebSocketEndpoint' | 'createPairingOffer'>,
+  createOffer?: () => Promise<ReturnType<OrcaRuntimeRpcServer['createPairingOffer']>>
 ): Promise<Pick<ServeReadiness, 'boundEndpoint' | 'advertisedEndpoint' | 'pairing'>> {
   const boundEndpoint = rpc.getWebSocketEndpoint()
   const advertised = boundEndpoint
     ? resolveAdvertisedPairingEndpoint(boundEndpoint, options.pairingAddress)
     : null
-  const offer = options.noPairing
+  const offer = createOffer ? await createOffer() : options.noPairing
     ? ({
         available: false,
         reason: 'disabled_by_operator',
