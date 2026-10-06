@@ -142,7 +142,7 @@ function normalizeCloudSummary(value: unknown): OrcaProfileCloudSummary {
   }
 }
 
-function normalizeSessionResponse(value: unknown): OrcaCloudSessionExchangeResponse {
+export function normalizeSessionResponse(value: unknown): OrcaCloudSessionExchangeResponse {
   if (!value || typeof value !== 'object') {
     throw new Error('invalid_orca_cloud_session')
   }

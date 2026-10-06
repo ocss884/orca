@@ -1,3 +1,5 @@
+import { importServeRelaySession } from './serve-relay-session'
+import { registerServeRelayPairingRefresh } from './serve-relay-pairing'
 import { app, type BrowserWindow } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import {
@@ -130,6 +132,7 @@ async function launchServeMode(
   // Why here: headless serve has no window to unblock, so keep the persisted proxy strictly
   // ahead of every fetcher this phase can reach (relay, CLI install, RPC clients).
   await state.initialProxyApplicationReady
+  await importServeRelaySession()
   // Why: give managed WSL launchers a brief chance to migrate before headless PTYs go live, without slow repairs withholding all RPC readiness.
   logStartupMilestone('wsl-cli-barrier-start')
   await state.managedWslCliStartupBarrierReady
@@ -215,6 +218,7 @@ async function launchServeMode(
   void scheduleAllPendingHistoryTreeRemovals()
   emitServeBrowserIdentityActionLine(getBrowserIdentityModeStatus())
   await printServeReady(serveOptions)
+  registerServeRelayPairingRefresh(runtimeRpc, serveOptions, runtime.getRuntimeId())
 }
 
 async function launchDesktopMode(
