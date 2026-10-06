@@ -1,3 +1,5 @@
+> **Self-hosted headless Relay fork:** Based on upstream `v1.4.221`. See [setup, authentication and upgrade verification](docs/selfhost-relay.md). Branch `selfhost-relay` contains the fork changes; `main` is the upstream baseline.
+
 <h1 align="center">
   <a href="https://onOrca.dev"><img src="resources/build/icon.png" alt="Orca" width="64" valign="middle" /></a> Orca
 </h1>

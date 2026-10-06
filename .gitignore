@@ -174,3 +174,5 @@ ci-shards/
 .build/preflight-benchmark/
 
 .local/static-analysis-research/
+# Fork deployment and upgrade instructions
+!docs/selfhost-relay.md
