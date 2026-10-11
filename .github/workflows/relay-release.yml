@@ -2,7 +2,8 @@ name: Build fork Relay release
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  # Draft release assets require a writer token; the workflow only downloads inputs.
+  contents: write
 concurrency:
   group: fork-relay-release-${{ github.ref }}
   cancel-in-progress: false
