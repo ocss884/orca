@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -21,6 +22,8 @@ def smoke(executable):
         for key in ('ELECTRON_RUN_AS_NODE', 'ORCA_RELAY_SESSION_FILE', 'ORCA_SELFHOST_SESSION_FILE'):
             env.pop(key, None)
         args = [str(executable), f'--user-data-dir={root / "profile"}']
+        if sys.platform == 'darwin':
+            args += ['--password-store=basic', '--use-mock-keychain']
         if os.geteuid() == 0:
             args.append('--no-sandbox')
         args += ['serve', '--relay', '--no-pairing', '--port', str(port), '--json']
