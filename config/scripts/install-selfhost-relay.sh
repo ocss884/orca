@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 umask 077
-release=1.4.224-relay.1
+release=1.4.224-relay.2
 repo=ocss884/orca
 service_user=${SUDO_USER:-$(id -un)}
 relay='' password_file='' ca_file='' release_dir='' data_dir='' scope=runtime

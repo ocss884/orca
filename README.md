@@ -1,11 +1,11 @@
-> **Orca Relay fork:** `selfhost-relay` 已 rebase 到 upstream main `c69f9d2f6`。桌面 runtime 和 mobile 共用 Relay 传输，并保留各自的权限边界。
+> **Orca Relay fork:** `selfhost-relay` 已 rebase 到 upstream main `398cb846f`。桌面 runtime 和 mobile 共用 Relay 传输，并保留各自的权限边界。
 
 ## 安装与使用
 
-[下载 v1.4.224-relay.1](https://github.com/ocss884/orca/releases/tag/v1.4.224-relay.1)：Linux amd64 / arm64 `.deb`、macOS Apple Silicon 桌面 ZIP。桌面端和服务端都需要此 fork 才能使用 runtime Relay 连接。
+[下载 v1.4.224-relay.2](https://github.com/ocss884/orca/releases/tag/v1.4.224-relay.2)：Linux amd64 / arm64 `.deb`、macOS Apple Silicon 桌面 ZIP。桌面端和服务端都需要此 fork 才能使用 runtime Relay 连接。
 
 ```bash
-curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.224-relay.1/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
+curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.224-relay.2/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
 sudo bash /tmp/install-orca-relay.sh \
   --user "$USER" \
   --relay https://relay.example.com:8443 \

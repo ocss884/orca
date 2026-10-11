@@ -38,7 +38,7 @@ module.exports = {
     const manifest = {
       release: context.packager.appInfo.version,
       sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-      upstreamCommit: 'c69f9d2f625c7b8ba9b7aabc77698473ebef372c',
+      upstreamCommit: '398cb846ff16a5abfb9350309842c16a3fe8148a',
       upstreamSshTemplate: '57452c681f27c03fd3c016a06da6315777db775a',
       platform: context.electronPlatformName,
       architecture: ['ia32', 'x64', 'armv7l', 'arm64', 'universal'][context.arch],

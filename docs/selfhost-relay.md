@@ -1,8 +1,8 @@
 # Relay in the Orca fork
 
 `selfhost-relay` is rebased onto upstream main at
-[`c69f9d2f6`](https://github.com/stablyai/orca/commit/c69f9d2f625c7b8ba9b7aabc77698473ebef372c).
-Release **v1.4.224-relay.1** builds the server, desktop renderer, preload, CLI,
+[`398cb846f`](https://github.com/stablyai/orca/commit/398cb846ff16a5abfb9350309842c16a3fe8148a).
+Release **v1.4.224-relay.2** builds the server, desktop renderer, preload, CLI,
 web client and mobile web bundle from this fork. Desktop runtime Relay support is
 adapted from [upstream PR #25492](https://github.com/stablyai/orca/pull/25492),
 including the newer upstream permission and delegated-phone model.
@@ -92,12 +92,12 @@ connector in this change. The desktop's remote-runtime transport implements it.
 ## Linux installation
 
 Download the versioned installer or `.deb` from the
-[release](https://github.com/ocss884/orca/releases/tag/v1.4.224-relay.1).
+[release](https://github.com/ocss884/orca/releases/tag/v1.4.224-relay.2).
 The installer supports Debian/Ubuntu amd64 and arm64, including systemd-enabled
 WSL2, and verifies `SHA256SUMS`, package version and architecture before install.
 
 ```sh
-curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.224-relay.1/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
+curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.224-relay.2/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
 sudo bash /tmp/install-orca-relay.sh
 
 # Configure your existing compatible Relay and start the runtime-scoped server.
