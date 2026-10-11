@@ -13,7 +13,8 @@ import time
 
 
 def smoke(executable):
-    with tempfile.TemporaryDirectory(prefix='orca-package-smoke-') as directory:
+    # macOS's default per-user temp path can exceed the Unix socket path budget.
+    with tempfile.TemporaryDirectory(prefix='orca-smoke-', dir='/tmp') as directory:
         root = Path(directory)
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
