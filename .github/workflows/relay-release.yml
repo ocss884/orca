@@ -55,6 +55,10 @@ jobs:
       - name: Typecheck
         if: matrix.platform == 'linux' && matrix.arch == 'x64'
         run: pnpm run tc
+      - name: Verify mobile transport compatibility
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        working-directory: mobile
+        run: pnpm exec vitest run src/transport --maxWorkers=4
       - name: Check installer
         run: |
           python3 config/scripts/selfhost-relay-install.test.py

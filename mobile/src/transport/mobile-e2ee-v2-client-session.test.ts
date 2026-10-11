@@ -124,7 +124,7 @@ describe('mobile E2EE v2 client session', () => {
     expect(session.openText(encoded)).toBe(plaintext)
   })
 
-  it('preserves full large text frames with bounded binary string conversions', () => {
+  it('preserves full large text frames with bounded fallback binary string conversions', () => {
     const { session, schedule } = pairedSession()
     const plaintext = 'a'.repeat(2 * 1024 * 1024)
     const incoming = desktopTextFrame(plaintext, schedule)
@@ -139,6 +139,12 @@ describe('mobile E2EE v2 client session', () => {
       })
     ).toString('base64')
     const encode = vi.spyOn(globalThis, 'btoa')
+    // Newer Node versions have the native fast path; this case exercises the mobile fallback.
+    const nativeEncoder = Object.getOwnPropertyDescriptor(Uint8Array.prototype, 'toBase64')
+    Object.defineProperty(Uint8Array.prototype, 'toBase64', {
+      value: undefined,
+      configurable: true
+    })
     try {
       expect(session.sealText(plaintext)).toBe(expectedOutgoing)
       expect(session.openText(incoming)).toBe(plaintext)
@@ -150,6 +156,11 @@ describe('mobile E2EE v2 client session', () => {
       expect(largestBinaryString).toBeLessThanOrEqual(16 * 1024)
     } finally {
       encode.mockRestore()
+      if (nativeEncoder) {
+        Object.defineProperty(Uint8Array.prototype, 'toBase64', nativeEncoder)
+      } else {
+        Reflect.deleteProperty(Uint8Array.prototype, 'toBase64')
+      }
     }
   })
 })
