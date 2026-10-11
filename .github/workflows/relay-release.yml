@@ -92,8 +92,13 @@ jobs:
       - name: Boot packaged host on an isolated profile
         shell: bash
         run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get install -y ./dist/*.deb
+            python3 config/scripts/smoke-relay-package.py /opt/Orca/orca-ide
+            exit 0
+          fi
           checked=0
-          for executable in dist/linux*/orca-ide dist/mac*/Orca.app/Contents/MacOS/Orca; do
+          for executable in dist/mac*/Orca.app/Contents/MacOS/Orca; do
             if [ -f "$executable" ]; then
               python3 config/scripts/smoke-relay-package.py "$executable"
               checked=$((checked + 1))
