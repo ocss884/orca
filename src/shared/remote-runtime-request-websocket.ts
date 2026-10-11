@@ -16,6 +16,7 @@ import {
   invalidRemoteRuntimeResponseError,
   remoteRuntimeUnavailableError
 } from './remote-runtime-request-frames'
+import { withRemoteRuntimeSocketConnector } from './remote-runtime-socket-connector'
 
 export type RemoteRuntimeWebSocket = {
   ws: WebSocket
@@ -136,12 +137,14 @@ function createSocket(
   try {
     return {
       ok: true,
-      // Why: no runtime frame exceeds this, so a larger one is a broken peer, not a payload to buffer.
       ws: new WebSocket(
         pairing.endpoint,
-        remoteRuntimeConnectOptions(
-          { maxPayload: REMOTE_RUNTIME_MAX_WEBSOCKET_FRAME_BYTES },
-          connectTimeoutMs
+        withRemoteRuntimeSocketConnector(
+          pairing.endpoint,
+          remoteRuntimeConnectOptions(
+            { maxPayload: REMOTE_RUNTIME_MAX_WEBSOCKET_FRAME_BYTES },
+            connectTimeoutMs
+          )
         )
       ),
       keyPair

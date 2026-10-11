@@ -97,6 +97,22 @@ describe('orca serve host selection', () => {
     expect(stderr.join('')).not.toContain('[serve]')
   })
 
+  it.each([false, true])(
+    'uses the Relay-capable host with mobilePairing=%s',
+    async (mobilePairing) => {
+      electronChild()
+      await expect(serveOrcaApp({ relay: true, mobilePairing, json: true })).resolves.toBe(0)
+      expect(resolveLocalServeRuntimeMock).not.toHaveBeenCalled()
+      expect(serveWithOrcadMock).not.toHaveBeenCalled()
+      expect(spawnMock).toHaveBeenCalledWith(
+        '/opt/orca/orca-ide',
+        expect.arrayContaining(['--serve', '--serve-relay', '--serve-json']),
+        expect.any(Object)
+      )
+      expect(spawnMock.mock.calls[0][1].includes('--serve-mobile-pairing')).toBe(mobilePairing)
+    }
+  )
+
   describe('serves the profile it selected on', () => {
     function electronSpawn(): { args: string[]; env: NodeJS.ProcessEnv } {
       const [, args, options] = spawnMock.mock.calls[0]

@@ -4,6 +4,7 @@ import { getServeFlagTypoError, getServeOptionValidationError } from './serve-op
 const validOptions = {
   noPairing: false,
   mobilePairing: false,
+  relay: false,
   recipeJson: false,
   projectRoot: null
 }
@@ -11,6 +12,10 @@ const validOptions = {
 describe('getServeOptionValidationError', () => {
   it('accepts compatible options', () => {
     expect(getServeOptionValidationError(validOptions)).toBeNull()
+    expect(getServeOptionValidationError({ ...validOptions, relay: true })).toBeNull()
+    expect(
+      getServeOptionValidationError({ ...validOptions, relay: true, mobilePairing: true })
+    ).toBeNull()
   })
 
   it.each([
@@ -23,7 +28,9 @@ describe('getServeOptionValidationError', () => {
       { recipeJson: true, mobilePairing: true, projectRoot: '/tmp/repo' },
       /requires runtime pairing.*--mobile-pairing/i
     ],
-    [{ recipeJson: true }, /requires --project-root/i]
+    [{ recipeJson: true }, /requires --project-root/i],
+    [{ relay: true, noPairing: true }, /relay pairing requires a pairing link/i],
+    [{ relay: true, recipeJson: true, projectRoot: '/tmp/repo' }, /remove --relay/i]
   ])('rejects incompatible options', (override, expected) => {
     expect(
       getServeOptionValidationError({ ...validOptions, ...override } as typeof validOptions)

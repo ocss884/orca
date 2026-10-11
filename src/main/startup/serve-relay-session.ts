@@ -3,7 +3,7 @@ import { isAbsolute } from 'node:path'
 import { normalizeSessionResponse } from '../orca-profiles/profile-cloud-client'
 
 export async function importServeRelaySession(env = process.env): Promise<void> {
-  const file = env.ORCA_SELFHOST_SESSION_FILE
+  const file = env.ORCA_RELAY_SESSION_FILE ?? env.ORCA_SELFHOST_SESSION_FILE
   if (!file) {
     return
   }
@@ -12,7 +12,7 @@ export async function importServeRelaySession(env = process.env): Promise<void> 
     throw new Error('ORCA_CLOUD_API_URL must be an explicit HTTPS origin for session import')
   }
   if (!isAbsolute(file)) {
-    throw new Error('ORCA_SELFHOST_SESSION_FILE must be absolute')
+    throw new Error('ORCA_RELAY_SESSION_FILE must be absolute')
   }
   const stat = lstatSync(file)
   if (!stat.isFile() || stat.size > 1024 * 1024) {

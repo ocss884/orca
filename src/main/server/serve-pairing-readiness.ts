@@ -1,7 +1,17 @@
 import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { resolveAdvertisedPairingEndpoint } from '../runtime/pairing-endpoint'
 import { assertServeProjectRoot, renderServePairingQr } from './serve-pairing-output'
-import type { ServeReadiness, ServeReadinessOutput } from './serve-readiness'
+import type {
+  ServeReadiness,
+  ServeReadinessOutput,
+  ServeRelayPairingReadiness,
+  ServePairingReadiness
+} from './serve-readiness'
+
+type ServePairingOffer = (
+  | ReturnType<OrcaRuntimeRpcServer['createPairingOffer']>
+  | Extract<ServePairingReadiness, { available: false }>
+) & { relay?: ServeRelayPairingReadiness }
 
 /** Endpoint and pairing-offer fields shared by the Electron serve host and orcad. */
 export async function buildServePairingReadiness(
@@ -12,24 +22,26 @@ export async function buildServePairingReadiness(
     grantDesktopControl?: boolean
   },
   rpc: Pick<OrcaRuntimeRpcServer, 'getWebSocketEndpoint' | 'createPairingOffer'>,
-  createOffer?: () => Promise<ReturnType<OrcaRuntimeRpcServer['createPairingOffer']>>
+  createOffer?: () => Promise<ServePairingOffer>
 ): Promise<Pick<ServeReadiness, 'boundEndpoint' | 'advertisedEndpoint' | 'pairing'>> {
   const boundEndpoint = rpc.getWebSocketEndpoint()
   const advertised = boundEndpoint
     ? resolveAdvertisedPairingEndpoint(boundEndpoint, options.pairingAddress)
     : null
-  const offer = createOffer ? await createOffer() : options.noPairing
-    ? ({
-        available: false,
-        reason: 'disabled_by_operator',
-        guidance: 'Restart without --no-pairing to create a client pairing offer.'
-      } as const)
-    : rpc.createPairingOffer({
-        address: options.pairingAddress,
-        name: `${options.mobilePairing ? 'Mobile' : 'CLI'} ${new Date().toLocaleDateString()}`,
-        scope: options.mobilePairing ? 'mobile' : 'runtime',
-        grants: options.grantDesktopControl ? ['desktop-control'] : []
-      })
+  const offer: ServePairingOffer = createOffer
+    ? await createOffer()
+    : options.noPairing
+      ? ({
+          available: false,
+          reason: 'disabled_by_operator',
+          guidance: 'Restart without --no-pairing to create a client pairing offer.'
+        } as const)
+      : rpc.createPairingOffer({
+          address: options.pairingAddress,
+          name: `${options.mobilePairing ? 'Mobile' : 'CLI'} ${new Date().toLocaleDateString()}`,
+          scope: options.mobilePairing ? 'mobile' : 'runtime',
+          grants: options.grantDesktopControl ? ['desktop-control'] : []
+        })
 
   return {
     boundEndpoint,
@@ -41,6 +53,7 @@ export async function buildServePairingReadiness(
           endpoint: offer.endpoint,
           deviceId: offer.deviceId,
           webClientUrl: offer.webClientUrl,
+          ...(offer.relay ? { relay: offer.relay } : {}),
           scope: options.mobilePairing ? 'mobile' : 'runtime',
           qr: options.mobilePairing ? await renderServePairingQr(offer.pairingUrl) : null
         }

@@ -283,7 +283,7 @@ describe('pairing.delegatedMobileDevice.sync', () => {
     const desktop = pairDesktop(server)
     const [child] = await sync(desktop, [{ phoneKey: 'p', name: 'p' }])
     expect(
-      server.setMobileRelayBinding(child!.deviceId, {
+      server.setDeviceRelayBinding(child!.deviceId, {
         relayHostId: 'host',
         relayDeviceId: child!.deviceId,
         ownerIdentityKey: 'owner'
@@ -304,7 +304,7 @@ describe('pairing.delegatedMobileDevice.sync', () => {
     const desktop = pairDesktop(server)
     const [child] = await sync(desktop, [{ phoneKey: 'p', name: 'p' }])
     expect(
-      server.setMobileRelayBinding(child!.deviceId, {
+      server.setDeviceRelayBinding(child!.deviceId, {
         relayHostId: 'host',
         relayDeviceId: child!.deviceId,
         ownerIdentityKey: 'owner'

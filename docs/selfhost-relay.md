@@ -1,215 +1,196 @@
-# Self-hosted headless Relay fork
+# Relay in the Orca fork
 
-This branch adds native Relay support to `orca serve`, based on upstream **v1.4.221**.
-It uses the existing mobile pairing, device authentication and E2EE protocols.
-It does not bundle a Relay deployment, an authentication server, any credentials or a CA.
+`selfhost-relay` is rebased onto upstream main at
+[`c69f9d2f6`](https://github.com/stablyai/orca/commit/c69f9d2f625c7b8ba9b7aabc77698473ebef372c).
+Release **v1.4.224-relay.1** builds the server, desktop renderer, preload, CLI,
+web client and mobile web bundle from this fork. Desktop runtime Relay support is
+adapted from [upstream PR #25492](https://github.com/stablyai/orca/pull/25492),
+including the newer upstream permission and delegated-phone model.
 
-## Patch boundaries
+## Shared transport, separate permissions
 
-1. Share the desktop Relay provider startup with serve mode, after RPC initialization.
-   Based on [upstream PR #22435](https://github.com/stablyai/orca/pull/22435)
-   ([alternative #20862](https://github.com/stablyai/orca/pull/20862), [issue #18504](https://github.com/stablyai/orca/issues/18504)).
-2. Explicitly import an origin-bound account session into a dedicated headless profile.
-   Normal profile/session stores and the existing token refresh mechanism remain in use.
-3. Opt into native mobile Relay invites at startup and privately write pairing results.
-   Linux/macOS can refresh an invite with SIGUSR2 without restarting the host.
-4. Provide a noninteractive PKCE login helper for the single-user compatible auth service.
+Relay invite creation, host registration, E2EE v2 framing, device authentication,
+resume credentials and revocation are shared. Relay is a transport: it never
+changes a device's persisted scope or grants.
 
-No mobile or runtime wire fields are changed. Direct CLI/runtime pairing remains the
-upstream default unless the operator explicitly opts into the mobile Relay flow.
+| Client                       | Invite                                                | Permissions                                                                                  |
+| ---------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Orca desktop                 | `scope=runtime`, `orca serve --relay`                 | Upstream paired-runtime permissions; no pairing administration or desktop control by default |
+| Phone                        | `scope=mobile`, `orca serve --relay --mobile-pairing` | Existing mobile RPC allowlist and delegated-phone restrictions                               |
+| Runtime with desktop control | Explicit `--grant-desktop-control` at pairing         | Adds only the upstream desktop-control grant                                                 |
 
-## Configure a host
+The dispatcher grants a Relay-enabled runtime connection access to exactly two
+self-management calls: `pairing.getEndpoints` and `pairing.provisionRelay`. Both
+require the authenticated E2EE device identity and operate on that device only.
+Other pairing administration remains denied. An ordinary direct runtime device
+cannot obtain Relay eligibility by calling those methods. Failed cloud credential
+installation does not turn an expiring invite into persistent Relay demand.
 
-Use a fork-built Orca installation. The upstream binary does not understand the new
-`ORCA_SELFHOST_*` variables. Use a persistent dedicated user data directory; never
-copy another host's E2EE keys or device registry. Do not run two processes on one profile.
+Runtime access includes executing workspace commands as the host user, as upstream
+does. These RPC distinctions are not an OS sandbox.
 
-Example environment file (replace paths and origin):
-
-```ini
-ORCA_CLOUD_API_URL=https://relay.example.com:8443
-ORCA_CLOUD_CLIENT_ID=orca-desktop
-ORCA_RELAY_URL=https://relay.example.com:8443
-ORCA_SELFHOST_PASSWORD_FILE=/home/orca/.config/orca-relay/password
-ORCA_SELFHOST_SESSION_FILE=/home/orca/.config/orca-relay/session.json
-ORCA_SELFHOST_RELAY_PAIRING=1
-ORCA_SELFHOST_PAIRING_FILE=/home/orca/.config/orca-relay/pairing.json
-ORCA_BACKGROUND_LAUNCH=1
-HOME=/home/orca
+```mermaid
+sequenceDiagram
+    participant C as Desktop / phone
+    participant R as Relay cell
+    participant T as Shared E2EE transport
+    participant D as Device registry
+    participant P as RPC permission gate
+    participant H as Host runtime
+    C->>R: Redeem scoped invite / resume credential
+    R->>T: Forward encrypted frames
+    C->>T: Pin host key, complete E2EE, authenticate device
+    T->>D: Resolve persisted device scope and grants
+    D-->>T: runtime or mobile
+    C->>T: Encrypted RPC request
+    T->>P: Request + authenticated caller scope
+    alt mobile
+        P->>P: Mobile allowlist and delegation checks
+    else runtime
+        P->>P: Runtime permissions and explicit grants
+    end
+    P->>H: Allowed RPC
+    H-->>C: Encrypted response through same transport
 ```
 
-An HTTPS IP origin is also supported. For a private CA, additionally set
-`NODE_EXTRA_CA_CERTS` to the CA certificate file and trust that CA on the phone.
-Never disable TLS verification. Keep the password and session files owned by the
-service user and mode 0600; keep their parent directory private (0700). Windows
-operators must restrict file ACLs to the service identity themselves.
+The desktop client stores the private Relay route with the existing runtime host.
+It tries direct E2EE first, then Relay; subsequent calls use the same request and
+subscription interfaces. Resume credentials refresh in place, and removing a
+runtime grant revokes its Relay credential and delegated children. Public host
+summaries omit Relay bearer credentials.
 
-Copy `config/scripts/selfhost-relay-login.mjs` alongside the installed application.
-With the environment loaded, run the helper using Node 24, then launch the host:
+## Use from the desktop or CLI
+
+Install this fork on the connecting desktop as well as the server. An older
+official desktop does not implement the new Relay route.
+
+On a signed-in host, **Settings → Connections → Share this server → Any network**
+creates a runtime Relay link. On the other desktop, paste it into **Add server**.
+Mobile links remain separate and are added in the phone app.
 
 ```sh
-node /opt/orca-relay-tools/selfhost-relay-login.mjs
-/opt/orca/current/orca-ide serve --port 6768 --pairing-address 127.0.0.1 --mobile-pairing --json
+# Desktop/runtime invitation
+orca serve --relay --port 6768 --json
+# Phone invitation (choose this mode instead when starting the server)
+orca serve --relay --mobile-pairing --port 6768 --json
 ```
 
-The helper uses the compatible `/v1/desktop/auth/authorize` and `/session` endpoints,
-validates the PKCE callback and writes `{origin, session}` atomically. This is a
-single-user self-host auth flow, not a general-purpose official Orca OAuth login tool.
-The importer rejects expired sessions, missing `relay.use`, wrong origins, unsafe
-POSIX permissions, and attempts to replace a different linked account.
+`--relay` selects the Relay-capable Electron host; the current upstream `orcad`
+serve host has no account-backed Relay provider. A failed runtime Relay mint is
+reported separately from direct pairing, so a direct link is never presented as a
+working Relay link. `--no-pairing` suppresses invitation creation.
 
-Linux headless may have memory-only account storage. **Run login before every service
-start** rather than reusing the original session file indefinitely. During a running
-session, Orca's normal refresh logic applies. A fresh login is the recovery mechanism
-if a refresh was ambiguous and Orca refuses to replay it.
+For runtime JSON output, use `pairing.relay.url` when `pairing.relay.available` is
+true. `pairing.url` is the separate direct link. The private `ORCA_PAIRING_FILE`
+contains the underlying offer: runtime Relay is also `pairing.relay.url`; mobile
+Relay is `pairing.pairingUrl`. Treat all these URLs as credentials.
 
-The invite can contain a direct endpoint as well as Relay metadata (`automatic`
-connection mode). A phone uses its saved host/credential record; merely connecting a
-new host to Relay does not automatically add it to the phone's host list.
+Standalone browser clients and the external CLI do not gain their own Relay
+connector in this change. The desktop's remote-runtime transport implements it.
 
-## systemd example
+## Linux installation
 
-This sample assumes the operator has already created user `orca`, its private config
-directory, the environment file, the password file and the installed fork build.
-
-```ini
-[Unit]
-Description=Orca headless with self-hosted Relay
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=orca
-Group=orca
-WorkingDirectory=/home/orca
-EnvironmentFile=/home/orca/.config/orca-relay/headless.env
-UMask=0077
-ExecStartPre=/usr/bin/node /opt/orca-relay-tools/selfhost-relay-login.mjs
-ExecStart=/opt/orca/current/orca-ide serve --port 6768 --pairing-address 127.0.0.1 --mobile-pairing --json
-Restart=on-failure
-RestartSec=15
-StandardOutput=null
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-```
-
-The JSON readiness output contains pairing credentials, so this sample discards stdout
-and uses the private `ORCA_SELFHOST_PAIRING_FILE`. Inspect `pairing.available`,
-`generatedAt` and `runtimeId` there. An unavailable result overwrites the old file too.
-`--pairing-address` changes the advertised address, **not** the server bind address;
-protect direct port 6768 separately if only Relay access is intended. The host only
-needs outbound access to the Relay's HTTPS port. No tunnel or external bridge is used.
-
-On Linux, generate a fresh invite without restarting:
+Download the versioned installer or `.deb` from the
+[release](https://github.com/ocss884/orca/releases/tag/v1.4.224-relay.1).
+The installer supports Debian/Ubuntu amd64 and arm64, including systemd-enabled
+WSL2, and verifies `SHA256SUMS`, package version and architecture before install.
 
 ```sh
-systemctl kill --kill-who=main --signal=SIGUSR2 orca-headless.service
+curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.224-relay.1/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
+sudo bash /tmp/install-orca-relay.sh
+
+# Configure your existing compatible Relay and start the runtime-scoped server.
+sudo bash /tmp/install-orca-relay.sh \
+  --user "$USER" \
+  --relay https://relay.example.com:8443 \
+  --password-file /path/to/private/relay-password \
+  --ca /path/to/relay-ca.crt
+# Add --scope mobile to generate a phone invitation instead.
 ```
 
-This targets the Orca process in the example unit. If a wrapper is the main process,
-signal its Orca child instead. The updated private file contains `pairing.pairingUrl`.
-Show it as a QR locally; do not publish the file or put it in a repository.
-SIGUSR2 refresh is not registered on Windows or when pairing is disabled.
+Omit `--ca` for a publicly trusted certificate. The password stays in a private
+file, never in argv. TLS verification remains enabled. The Relay deployment and
+single-user compatible authentication service are external to this repository.
+The login helper uses their PKCE desktop authorization/session endpoints; it is
+not a substitute for the official hosted service's interactive account login.
 
-## Verification and upgrades
+All application paths and identity follow upstream:
 
-Install dependencies with the upstream-pinned pnpm and Node 24. For these source checks,
-`pnpm install --frozen-lockfile --ignore-scripts` is enough; packaging needs the ordinary
-native dependency setup described by upstream.
+- Application: `/opt/Orca`; CLI and package identity remain Orca's.
+- Profile and configuration: the service user's `~/.config/orca`.
+- Service: `orca.service`; environment: `~/.config/orca/relay.env`.
+- Private files: `relay-password`, `relay-session.json`, `pairing.json` in that profile.
+- An explicit `--data-dir /absolute/path` is passed through the official profile override.
+
+No `.orca-selfhost`, separate package identity or fork-only default data root is
+created. Do not run two hosts on the same profile. The service runs with the chosen
+user's ordinary file/process privileges. Configure AI CLI installations and `PATH`
+for that account. Root uses Electron's required `--no-sandbox`; prefer the account
+that normally owns your projects.
+
+Each service start refreshes the origin-bound login session. A running host uses
+Orca's regular refresh logic. Import rejects expired or wrong-origin sessions,
+missing Relay entitlement, unsafe permissions and replacement of another account.
 
 ```sh
-pnpm tc:node
+sudo systemctl status orca.service
+sudo systemctl kill --kill-who=main --signal=SIGUSR2 orca.service
+```
+
+SIGUSR2 writes a fresh private invitation without restarting the runtime. The unit
+discards readiness stdout because it contains credentials. Logs are in the journal.
+`--pairing-address 127.0.0.1` advertises loopback; it does not change the bind address.
+Restrict inbound port 6768 separately if only outbound HTTPS/WSS Relay is desired.
+The wrapper uses the native transport inside Orca, without an external proxy process.
+
+## Upgrade an older fork installation
+
+The earlier release used `orca-selfhost.service` and separate paths. The new
+installer refuses while that old service is active. Publishing a release does not
+upgrade a running host automatically.
+
+1. Stop the old service and back up its profile, config and program. Preserve E2EE
+   keys and the device registry together; they determine existing-device identity.
+2. With both hosts stopped, move the old profile to the official `~/.config/orca`
+   only if that destination does not already contain another Orca profile. Do not
+   merge two profiles. Alternatively, use `--data-dir` explicitly to keep the old
+   profile at its current path.
+3. Install/configure the new release with the desired user, Relay origin and private
+   password/CA files. It writes a new `relay.env` in the selected profile. The old
+   `ORCA_SELFHOST_*` environment names remain input aliases for manual installations.
+4. Verify desktop and phone reconnect, then disable the old service. Never start
+   both against the same profile or port. Retain the old backup until accepted.
+
+Rollback requires stopping the new service and restoring the matching old profile
+snapshot as well as its binary. Use manual fork releases for upgrades; macOS ZIPs
+are ad-hoc signed and not notarized, so they do not provide official signed updater
+compatibility. Gatekeeper may require explicitly approving the downloaded app.
+
+## Reproduce and verify the release
+
+Use Node 24 and the pinned pnpm from `package.json`:
+
+```sh
+pnpm install --frozen-lockfile
+(cd mobile && pnpm install --frozen-lockfile)
+ORCA_BACKGROUND_LAUNCH=1 pnpm tc
 pnpm test:selfhost-relay
+python3 config/scripts/selfhost-relay-install.test.py
+pnpm build:release
+python3 config/scripts/prepare-relay-release.py --template /path/to/orca-ssh-template-57452c681f27.zip
+pnpm exec electron-builder --config config/electron-builder.relay.cjs --linux deb --x64 --publish never
 ```
 
-The tests cover session scope/expiry/permissions, callback and PKCE validation,
-existing direct pairing behavior, relay opt-in, disabled pairing, private refresh
-output, startup ordering and native mobile pairing-mode persistence. They do not
-replace testing an actual packaged Linux build against a deployed Relay and iPhone.
+The release workflow builds Linux amd64, Linux arm64 and macOS arm64 natively. All
+Orca application JavaScript is rebuilt from the fork. The separate cross-platform
+SSH deployment template is pinned to upstream commit
+`57452c681f27c03fd3c016a06da6315777db775a` and SHA-256
+`915b2ca129fccc0f4d7e94d78f7027580d123db13e58782bc3d9c7d86b9d7ce9`.
+The exact input ZIP is included in the fork release. Upstream's nine-target template
+and Linux glibc compatibility guards run during packaging without bypasses.
 
-Before deploying an upgrade:
-
-1. Stop the service and back up the current program, config, profile and pairing keys.
-2. Rebase this branch onto a selected release and drop provider wiring if upstream
-   includes an equivalent fix. Do not automatically follow upstream main in production.
-3. Run the checks, follow upstream's Linux x86_64 build instructions, and install the
-   new program in a new version directory. Do not copy a compiled JS file from an old build.
-4. From an external machine, connect using Relay only, complete E2EE/device auth, and
-   assert `status.get` and `pairing.getEndpoints` succeed for the expected runtime.
-   Use a separate test invite; it can consume credentials intended for a phone.
-5. Check fresh phone pairing, existing-device reconnect after restart, and token refresh.
-6. Switch `/opt/orca/current` only to an accepted version. If reverting across a profile
-   migration, restore the matching stopped-service data snapshot as well as the program.
-
-Keep Relay and compatible auth deployments versioned independently.
-
-## Linux binary installation and packaging
-
-See the [README](../README.md) for the pinned installer. Release `v1.4.221-relay.1`
-provides Linux amd64 and arm64 tarballs, a SHA256SUMS file, and an installer. These
-are headless packages for Debian/Ubuntu, not signed desktop installers or 32-bit ARM builds.
-The installer satisfies the upstream Debian runtime dependencies and installs audio
-libraries needed by Electron even with no display. A system Node installation is not
-required: the login helper uses the bundled Electron's Node mode.
-
-The release reuses **exactly v1.4.221** official runtime/native dependencies and renderer,
-then replaces the entire main-process bundle, including every chunk, with a build from
-this fork. `package-selfhost-relay.py` pins each official Debian package's SHA-256,
-checks its architecture and ASAR package version, and rewrites the main entries to the
-new unpacked bundle while preserving offsets for the other ASAR contents. It records
-source commit, upstream digest and individual compiled JS hashes in `BUILD-INFO.json`.
-The ASAR and shipped helper files are hashed as well. No credentials or host profile are included. The updater feed points to this fork;
-headless upgrades are performed with the installer, not the desktop updater.
-
-Build on a machine with Node 24 and the repository's pinned pnpm:
-
-```sh
-pnpm install --frozen-lockfile --ignore-scripts
-ORCA_ELECTRON_VITE_TARGET=main node config/scripts/run-electron-vite-build.mjs --config config/electron-vite-target.config.cts
-```
-
-On Linux with `dpkg-deb`, using the same checkout and the built `out/main/`:
-
-```sh
-python3 config/scripts/package-selfhost-relay.py \
-  --deb /path/to/orca-ide_1.4.221_amd64.deb --arch amd64 \
-  --source-commit "$(git rev-parse HEAD)" --output release
-# Repeat with the official arm64 Debian package and --arch arm64.
-(cd release && sha256sum orca-headless-*.tar.gz > SHA256SUMS)
-```
-
-Do not change just the pinned base version: an upgrade must build main from that same
-upstream version plus the fork commits, update the official digests and release name,
-and repeat packaged validation on supported architectures before publishing.
-
-The installer creates `orca-selfhost.service`, distinct from older hand-built services
-named `orca-headless.service`. It does not migrate an old profile or stop another
-service using port 6768. Resolve any existing port/profile conflict before installation.
-`--user` defaults to the sudo caller (or current account if already root); root launches
-need Chromium's `--no-sandbox`, which the wrapper adds only for UID 0. The service gives Xvfb its own `/tmp/.X11-unix` mount, avoiding WSLg's read-only socket directory without changing the host mount. It has
-that user's normal host privileges and no disk read/write throttling. Systemd cannot
-start a WSL distribution while Windows has it shut down; the service starts when the
-systemd-enabled distribution starts.
-
-On an upgrade the installer retains the old version directory and records its path in
-`/opt/orca-selfhost/previous-version`. Stop the service and back up the private config
-and persistent profile **before upgrading**. A rollback may need the matching profile
-snapshot, not just an old binary. Existing config is reused if `--relay` is omitted;
-providing Relay options again creates a new configuration and backs up the previous env
-file. Runtime identity and device keys belong in the persistent profile, not the package.
-
-The original v1.4.220 deployment is separate and remains unchanged by publishing this
-release. A protocol probe is not a substitute for the user's real iPhone acceptance.
-
-### Release validation
-
-For `v1.4.221-relay.1`: the 38 focused TypeScript tests and four packaging/checksum
-tests pass; the shell scripts pass ShellCheck. The amd64 package was installed in
-Ubuntu 24.04 WSL2, authenticated against a self-hosted Relay over verified TLS, and
-passed mobile-protocol E2EE, device authentication, RPC and resume-credential reconnect
-after service restart. The arm64 package started to `orca_server_ready` in a native
-ARM64 Ubuntu 24.04 container. ARM64 Relay end-to-end and a real iPhone connection to
-this new WSL host are not included in those results.
+`resources/BUILD-INFO.json` records the fork commit, upstream base, native-template
+commit and hashes of the application and Relay helpers. Tests exercise runtime and
+mobile authentication, scope/grant rejection, direct fallback, cloud relocation,
+credential renewal/revocation, delegated phones, headless session import and UI link
+handling. These automated peers are not a claim of physical iPhone acceptance.

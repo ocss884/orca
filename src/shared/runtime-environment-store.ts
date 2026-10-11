@@ -7,6 +7,7 @@ import {
   getPreferredPairingOffer,
   type KnownRuntimeEnvironment,
   type PersistedRuntimeEnvironment,
+  type RuntimeEnvironmentRelayRoute,
   type RuntimeEnvironmentSource
 } from './runtime-environments'
 import {
@@ -39,6 +40,7 @@ export function addEnvironmentFromPairingCode(
     now?: number
     source?: RuntimeEnvironmentSource
     connectionDependency?: 'ssh-tunnel'
+    relay?: RuntimeEnvironmentRelayRoute
   }
 ): KnownRuntimeEnvironment {
   const offer = parseRemotePairingCode(userDataPath, args.pairingCode)
@@ -58,7 +60,8 @@ export function addEnvironmentFromPairingCode(
     offer,
     runtimeId: null,
     ...(args.source ? { source: args.source } : {}),
-    ...getPairingConnectionDependency(args.connectionDependency, offer)
+    ...getPairingConnectionDependency(args.connectionDependency, offer),
+    ...(args.relay ? { relay: args.relay } : {})
   })
   const next = {
     version: 1 as const,
@@ -232,6 +235,27 @@ export function markEnvironmentUsed(
       : entry
   )
   writeEnvironmentStore(userDataPath, { version: 1, environments: next })
+}
+
+/** Persists a renewed or moved Relay route without a pairing revision, so live connections stay current. */
+export function updateEnvironmentRelayRoute(
+  userDataPath: string,
+  environmentId: string,
+  update: (relay: RuntimeEnvironmentRelayRoute) => RuntimeEnvironmentRelayRoute
+): RuntimeEnvironmentRelayRoute | null {
+  const store = readEnvironmentStore(userDataPath)
+  const environment = store.environments.find((entry) => entry.id === environmentId)
+  if (!environment?.relay) {
+    return null
+  }
+  const relay = update(environment.relay)
+  writeEnvironmentStore(userDataPath, {
+    version: 1,
+    environments: store.environments.map((entry) =>
+      entry.id === environmentId ? { ...entry, relay } : entry
+    )
+  })
+  return relay
 }
 
 function preferredDeviceToken(environment: PersistedRuntimeEnvironment): string | undefined {

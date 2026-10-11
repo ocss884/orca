@@ -13,6 +13,7 @@ const unavailable = {
   guidance: 'Not ready'
 } as const
 const server = () => ({
+  createRuntimeRelayPairingOffer: vi.fn(async () => unavailable),
   createPairingOffer: vi.fn(() => unavailable),
   createMobilePairingOffer: vi.fn(async () => unavailable)
 })
@@ -21,6 +22,8 @@ const options: ServeOptions = {
   pairingAddress: '127.0.0.1',
   noPairing: false,
   mobilePairing: true,
+  grantDesktopControl: false,
+  relay: false,
   recipeJson: false,
   projectRoot: null
 }

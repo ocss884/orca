@@ -13,6 +13,7 @@ describe('getServeOptions', () => {
       noPairing: true,
       mobilePairing: false,
       grantDesktopControl: false,
+      relay: false,
       recipeJson: false,
       projectRoot: null
     })
@@ -144,9 +145,23 @@ describe('getServeOptions', () => {
       noPairing: false,
       mobilePairing: false,
       grantDesktopControl: false,
+      relay: false,
       recipeJson: false,
       projectRoot: null
     })
+  })
+
+  it('parses relay pairing from both argv shapes', () => {
+    expect(getServeOptions(['/AppRun', '--serve', '--serve-relay'])).toMatchObject({ relay: true })
+    expect(
+      getServeOptions(normalizeServeModeArgv(['/AppRun', 'serve', '--relay', '--port', '6768']))
+    ).toMatchObject({ relay: true, wsPort: 6768 })
+  })
+
+  it('allows Relay with an explicitly mobile-scoped pairing', () => {
+    expect(
+      getServeOptions(['/AppRun', '--serve', '--serve-relay', '--serve-mobile-pairing'])
+    ).toMatchObject({ relay: true, mobilePairing: true })
   })
 
   it('requires a port value', () => {

@@ -1,43 +1,30 @@
-> **Self-hosted headless Relay fork:** Based on upstream `v1.4.221`. Branch `selfhost-relay` contains the fork changes; `main` is the upstream baseline.
+> **Orca Relay fork:** `selfhost-relay` 已 rebase 到 upstream main `c69f9d2f6`。桌面 runtime 和 mobile 共用 Relay 传输，并保留各自的权限边界。
 
-## 安装带 Relay 补丁的 headless server
+## 安装与使用
 
-提供 **Linux x86_64 / ARM64** 安装包（不支持 32 位 ARM）。安装脚本自动选择架构，支持 Ubuntu 22.04+、Debian 12+，以及启用了 systemd 的 WSL2。
-
-```bash
-curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.221-relay.1/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
-sudo bash /tmp/install-orca-relay.sh
-```
-
-首次不带参数只安装程序。连接你自己的 Relay 并启动服务：
+[下载 v1.4.224-relay.1](https://github.com/ocss884/orca/releases/tag/v1.4.224-relay.1)：Linux amd64 / arm64 `.deb`、macOS Apple Silicon 桌面 ZIP。桌面端和服务端都需要此 fork 才能使用 runtime Relay 连接。
 
 ```bash
+curl -fL https://raw.githubusercontent.com/ocss884/orca/v1.4.224-relay.1/config/scripts/install-selfhost-relay.sh -o /tmp/install-orca-relay.sh
 sudo bash /tmp/install-orca-relay.sh \
   --user "$USER" \
-  --relay https://YOUR_RELAY_IP:8443 \
+  --relay https://relay.example.com:8443 \
   --password-file /path/to/private/relay-password \
   --ca /path/to/relay-ca.crt
 ```
 
-`--password-file` 指向只含 Relay 密码的私有文件；公有 CA 签发的证书不需要 `--ca`。不要把密码写入命令行或提交到 GitHub。服务以 `--user` 指定的现有用户运行，拥有该用户的宿主机文件和进程权限；默认使用 sudo 的调用者，直接以 root 安装则使用 root。它不在容器中运行。AI CLI 及登录凭据仍需存在于该用户的环境中；自定义 CLI 路径可在生成的 `headless.env` 中调整 `PATH`。
+公有 CA 证书无需 `--ca`。默认生成桌面 runtime 邀请；加 `--scope mobile` 生成手机邀请。首次不带参数只安装程序。
 
-- 安装位置：`/opt/orca-selfhost/current`，版本及源码提交见 `BUILD-INFO.json`。
-- 服务：`orca-selfhost.service`，开机启动，每次启动自动登录 Relay。
-- 配置与配对文件：服务用户的 `~/.config/orca-selfhost/`。
-- 持久化数据：服务用户的 `~/.local/share/orca-selfhost/`，升级保留。
-- 网络：headless 主动连接 Relay 的 HTTPS/WSS 端口，无隧道或 bridge。原生直接访问端口 6768 仍会监听；只需 Relay 时请在主机防火墙阻止该端口的外部入站。
+- 使用官方目录：程序 `/opt/Orca`，用户数据 `~/.config/orca`，服务 `orca.service`。不会创建独立的 selfhost 数据根目录。
+- 服务端：`orca serve --relay`；手机模式：`orca serve --relay --mobile-pairing`。
+- 桌面端可生成 **Any network** 链接，并在另一台桌面的 **Add server** 中添加。
+- runtime Relay 链接位于私有 `pairing.json` 的 `pairing.relay.url`；手机链接位于 `pairing.pairingUrl`。不要公开这些凭据。
+- `sudo systemctl kill --kill-who=main --signal=SIGUSR2 orca.service` 可刷新邀请。
+- mobile allowlist、runtime 权限和显式 desktop-control grant 保持独立。Relay 本身不提升权限。
 
-```bash
-sudo systemctl status orca-selfhost.service
-# 生成新的限时手机邀请，写入服务用户的 pairing.json
-sudo systemctl kill --kill-who=main --signal=SIGUSR2 orca-selfhost.service
-```
+旧版 `orca-selfhost.service` 需要按迁移说明停机并保留原 profile；安装器不会自动合并数据。macOS ZIP 为 ad-hoc 签名、未经 notarization，需手动安装。所有应用代码从 fork 完整编译，安装器检查 SHA-256；SSH 原生模板使用校验固定的上游构建。
 
-手机仍需扫码添加这台新主机；连接 Relay 不会自动把所有服务器添加到手机。`pairing.json` 中的 `pairing.pairingUrl` 可转成二维码，属于私有凭据。
-
-安装包保留经过 SHA-256 校验的同版本官方 Electron、前端及原生依赖，**完整主进程及其 chunks 从本 fork 源码重新编译**，不是对旧压缩代码做文本替换。安装脚本校验下载包和主进程文件，并将更新源指向本 fork。使用本安装脚本升级，不使用官方桌面更新器。
-
-[下载发行包](https://github.com/ocss884/orca/releases/tag/v1.4.221-relay.1) · [认证、验证、构建及升级说明](docs/selfhost-relay.md)
+[架构、权限、安装、迁移与构建说明](docs/selfhost-relay.md)
 
 <h1 align="center">
   <a href="https://onOrca.dev"><img src="resources/build/icon.png" alt="Orca" width="64" valign="middle" /></a> Orca

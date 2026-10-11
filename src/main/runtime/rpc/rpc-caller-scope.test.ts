@@ -273,6 +273,16 @@ describe('paired runtime clients', () => {
     }
   )
 
+  it('permits only self Relay management for a Relay-enabled runtime connection', async () => {
+    const scope: RpcCallerScope = { kind: 'runtime-paired', grants: [], relaySelfManagement: true }
+    for (const method of ['pairing.provisionRelay', 'pairing.getEndpoints']) {
+      expect(errorCode(await dispatchAs(scope, method, {}))).not.toBe('forbidden')
+    }
+    for (const method of ['notifications.registerPush', 'computer.click']) {
+      expect(errorCode(await dispatchAs(scope, method, {}))).toBe('forbidden')
+    }
+  })
+
   it('learn an unregistered method is missing rather than forbidden', async () => {
     const response = await dispatchAs(PAIRED, 'computer.methodFromTheFuture', {})
     expect(errorCode(response)).toBe('method_not_found')

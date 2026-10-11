@@ -22,7 +22,7 @@ export type RpcCallerScope =
   /** `delegated`: a phone a paired desktop holds a child device for; it reaches no further than that
    *  desktop, which is never granted `pairing-admin`. */
   | { kind: 'mobile'; delegated?: boolean }
-  | { kind: 'runtime-paired'; grants: readonly RuntimeDeviceGrant[] }
+  | { kind: 'runtime-paired'; grants: readonly RuntimeDeviceGrant[]; relaySelfManagement?: boolean }
   /** The `orca` CLI of a remote SSH host, relayed through this host's bridge. `remoteCliControl`
    *  is the per-target opt-in that lets that host's CLI act outside its own terminals. */
   | { kind: 'ssh-bridge'; targetId: string; remoteCliControl: boolean }
@@ -64,6 +64,13 @@ export function denyRpcMethodForCaller(
     return null
   }
   if (scope.kind === 'runtime-paired') {
+    // These methods act only on the E2EE-bound device, never on a caller-selected identity.
+    if (
+      scope.relaySelfManagement &&
+      (methodName === 'pairing.getEndpoints' || methodName === 'pairing.provisionRelay')
+    ) {
+      return null
+    }
     return !RUNTIME_PAIRED_STANDARD.has(permission) &&
       !scope.grants.some((grant) => grant === permission)
       ? `Method '${methodName}' needs the '${permission}' permission, which this paired client was not granted when it paired.`

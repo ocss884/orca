@@ -1,0 +1,106 @@
+name: Build fork Relay release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fork-relay-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.repository == 'ocss884/orca'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            arch: x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - os: macos-15
+            platform: mac
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      ORCA_BACKGROUND_LAUNCH: '1'
+      ORCA_REQUIRE_ORCAD_TEMPLATE: '1'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@v2
+        with:
+          install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - name: Install Linux runtime and build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libnss3 libasound2t64 libgbm1 libatk-bridge2.0-0 libxss1 libdrm2 libx11-xcb1 python3-gi gir1.2-atspi-2.0 at-spi2-core xclip xdotool xvfb
+          npm install -g node-gyp@11.5.0
+          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
+      - name: Install host dependencies
+        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/install-mobile-dependencies
+      - name: Verify Relay permissions and transport
+        run: pnpm run test:selfhost-relay
+      - name: Typecheck
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        run: pnpm run tc
+      - name: Check installer
+        run: |
+          python3 config/scripts/selfhost-relay-install.test.py
+          bash -n config/scripts/install-selfhost-relay.sh config/scripts/run-selfhost-relay.sh
+      - name: Build all application code
+        run: pnpm run build:release
+      - name: Stage checksum-pinned SSH template and Relay scripts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p .build/relay-inputs
+          tag="v$(node -p 'require("./package.json").version')"
+          gh release download "$tag" --repo "$RELEASE_REPO" --pattern orca-ssh-template-57452c681f27.zip --dir .build/relay-inputs
+          python3 config/scripts/prepare-relay-release.py --template .build/relay-inputs/orca-ssh-template-57452c681f27.zip
+          node -e "require('./config/scripts/verify-packaged-orcad-template.cjs').verifyPackagedOrcadTemplate('out')"
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        env:
+          BUILD_ARCH: ${{ matrix.arch }}
+        run: |
+          node config/scripts/ensure-native-runtime.mjs --runtime=electron
+          if [ "$BUILD_ARCH" = arm64 ]; then export ORCA_LINUX_ARM64_RELEASE=1; fi
+          pnpm exec electron-builder --config config/electron-builder.relay.cjs --linux deb --"$BUILD_ARCH" --publish never
+      - name: Package macOS
+        if: runner.os == 'macOS'
+        run: |
+          test "$(node -p 'process.arch')" = arm64
+          node config/scripts/ensure-native-runtime.mjs --runtime=electron
+          pnpm exec electron-builder --config config/electron-builder.relay.cjs --mac zip --arm64 --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false
+      - name: Boot packaged host on an isolated profile
+        shell: bash
+        run: |
+          checked=0
+          for executable in dist/linux*/orca-ide dist/mac*/Orca.app/Contents/MacOS/Orca; do
+            if [ -f "$executable" ]; then
+              python3 config/scripts/smoke-relay-package.py "$executable"
+              checked=$((checked + 1))
+            fi
+          done
+          test "$checked" = 1
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: relay-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            dist/*.deb
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 14

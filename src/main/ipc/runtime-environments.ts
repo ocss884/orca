@@ -16,6 +16,7 @@ import {
   closeRemoteRuntimeRequestConnection,
   getRuntimeEnvironmentStatusOwner
 } from './runtime-environment-request-connections'
+import { disposeRuntimeEnvironmentRelayBridge } from './runtime-environment-relay-route'
 import { registerRuntimeEnvironmentRecoveryHandler } from './runtime-environment-recovery-handler'
 import { advanceRuntimeEnvironmentTransportGeneration } from './runtime-environment-transport-generation'
 import { resetSharedControlSupport } from './runtime-environment-transport-routing'
@@ -76,6 +77,7 @@ export function invalidateRuntimeEnvironmentTransport(environmentId: string): Pr
   closeSubscriptionsForEnvironment(environmentId)
   retireMobileDesktopRelayEnvironment(environmentId)
   reactivateRuntimeEnvironmentStatus(environmentId)
+  disposeRuntimeEnvironmentRelayBridge(environmentId)
   return retirePairedRuntimeBrowserClientHostEnvironment(
     environmentId,
     new Error('Runtime environment transport was invalidated')

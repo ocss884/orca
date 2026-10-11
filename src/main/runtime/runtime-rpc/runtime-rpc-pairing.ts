@@ -52,11 +52,12 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     return this.pushUnregisterOutbox
   }
 
-  setMobileRelayBinding(deviceId: string, binding: RelayDeviceBinding): boolean {
+  setDeviceRelayBinding(deviceId: string, binding: RelayDeviceBinding): boolean {
     const current = this.deviceRegistry?.getDevice(deviceId)
     if (
-      current?.scope !== 'mobile' ||
-      this.deviceRegistry?.getMobilePairingConnectionMode(deviceId) === 'local-only'
+      !current ||
+      (current.scope === 'mobile' &&
+        this.deviceRegistry?.getMobilePairingConnectionMode(deviceId) === 'local-only')
     ) {
       return false
     }
@@ -171,6 +172,14 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     const endpoint = advertised.endpoint
     const deviceName = args.name ?? `CLI ${new Date().toLocaleDateString()}`
     const scope = args.scope ?? 'runtime'
+    // Why: rotation drops the never-used grant, so its Relay invite must not outlive it (mobile queues its own).
+    const rotatedRelayBinding =
+      args.rotate && scope === 'runtime'
+        ? this.deviceRegistry.getPendingDevice(scope)?.relayBinding
+        : undefined
+    if (rotatedRelayBinding && !this.queueRelayDeviceRevoke(rotatedRelayBinding)) {
+      return pairingUnavailable('device_registry_unavailable', DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE)
+    }
     let device: DeviceEntry
     try {
       const reach = args.reach ?? 'network'
@@ -183,6 +192,9 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
       return pairingUnavailable('device_registry_unavailable', DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE)
     }
     const hostDescriptor = this.hostDescriptor
+    if (rotatedRelayBinding) {
+      this.mobileRelayPairingProvider?.onDemandStateChanged?.()
+    }
     const pairingUrl = encodePairingOffer({
       v: PAIRING_OFFER_VERSION,
       endpoint,
