@@ -78,7 +78,8 @@ orca serve --relay --mobile-pairing --port 6768 --json
 `--relay` selects the Relay-capable Electron host; the current upstream `orcad`
 serve host has no account-backed Relay provider. A failed runtime Relay mint is
 reported separately from direct pairing, so a direct link is never presented as a
-working Relay link. `--no-pairing` suppresses invitation creation.
+working Relay link. `--no-pairing` suppresses direct invitation creation and cannot
+be combined with `--relay`.
 
 For runtime JSON output, use `pairing.relay.url` when `pairing.relay.available` is
 true. `pairing.url` is the separate direct link. The private `ORCA_PAIRING_FILE`
