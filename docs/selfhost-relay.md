@@ -64,7 +64,7 @@ summaries omit Relay bearer credentials.
 Install this fork on the connecting desktop as well as the server. An older
 official desktop does not implement the new Relay route.
 
-On a signed-in host, **Settings → Connections → Share this server → Any network**
+On a signed-in host, **Settings → Remote Orca Servers → Share this host → Any network**
 creates a runtime Relay link. On the other desktop, paste it into **Add server**.
 Mobile links remain separate and are added in the phone app.
 
