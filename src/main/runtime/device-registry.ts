@@ -13,6 +13,7 @@ import type { DeviceScope } from '../../shared/runtime-types'
 import { removeStaleDurableWriteTempFiles } from '../durable-file-write'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 import { mintDeviceCredential } from './device-credential'
+import { isDeviceRelayEnabled } from './device-relay-eligibility'
 import type { RelayDeviceBinding } from './relay/relay-revoke-outbox'
 import type { MobilePairingConnectionMode } from '../../shared/mobile-pairing-connection-mode'
 import type { RuntimePairingReach } from '../../shared/runtime-pairing-reach'
@@ -260,6 +261,12 @@ export class DeviceRegistry {
     // Why: pairings created before this preference existed used automatic
     // direct-first Relay fallback, so missing state must preserve that behavior.
     return device.mobilePairingConnectionMode === 'local-only' ? 'local-only' : 'automatic'
+  }
+
+  // Why: a runtime grant reaches Relay only when its offer was minted with Relay, so a
+  // direct-only grant cannot provision a cloud credential the operator never opted into.
+  isRelayEnabled(deviceId: string): boolean {
+    return isDeviceRelayEnabled(this.getDevice(deviceId))
   }
 
   listDevices(): readonly DeviceEntry[] {

@@ -34,7 +34,10 @@ def wait_ready(file, started_at):
         try:
             value = json.loads(Path(file).read_text())
             if value['generatedAt'] >= float(started_at) * 1000 and value['pairing']['available']:
-                code = parse_qs(urlsplit(value['pairing']['pairingUrl']).query)['code'][0]
+                pairing = value['pairing']
+                relay = pairing.get('relay', {})
+                url = relay.get('url') if relay.get('available') else pairing.get('pairingUrl')
+                code = parse_qs(urlsplit(url).query)['code'][0]
                 offer = json.loads(base64.urlsafe_b64decode(code + '=' * (-len(code) % 4)))
                 if offer.get('relay') and offer['relay']['inviteExpiresAt'] > time.time() * 1000:
                     print(f'Relay offer ready: runtime {value["runtimeId"]}')
@@ -48,6 +51,10 @@ def wait_ready(file, started_at):
 if __name__ == '__main__':
     if len(sys.argv) == 5 and sys.argv[1] == 'package':
         verify_package(*sys.argv[2:])
+    elif len(sys.argv) == 4 and sys.argv[1] == 'service-ready':
+        env_file = Path(sys.argv[2].split(' (', 1)[0])
+        values = dict(line.split('=', 1) for line in env_file.read_text().splitlines() if '=' in line)
+        wait_ready(json.loads(values['ORCA_PAIRING_FILE']), sys.argv[3])
     elif len(sys.argv) == 4 and sys.argv[1] == 'ready':
         wait_ready(*sys.argv[2:])
     else:

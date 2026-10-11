@@ -7,6 +7,9 @@ import { AddressPicker, type AddressOption } from '../network/AddressPicker'
 import { parseServerShareAddress } from '../../../../shared/network/server-share-address'
 import { GeneratedUrlRow, UnavailableUrlRow } from './RuntimePairingGeneratedUrlRows'
 import type { RuntimePairingIntent } from './runtime-pairing-link-state'
+import { RuntimePairingIntentPicker } from './RuntimePairingIntentPicker'
+import { isRuntimeRelayShareReady, RuntimeRelaySharePanel } from './RuntimeRelaySharePanel'
+import { useAppStore } from '../../store'
 import { translate } from '@/i18n/i18n'
 
 export type { RuntimePairingIntent } from './runtime-pairing-link-state'
@@ -22,6 +25,7 @@ type RuntimePairingGeneratorFormProps = {
   runtimePairingUrl: string | null
   copiedTarget: 'web' | 'pairing' | null
   generatedAddress: string | null
+  relayInviteExpiresAt: number | null
   onIntentChange: (intent: RuntimePairingIntent) => void
   onSelectedAddressChange: (address: string) => void
   onRefreshNetworkInterfaces: () => void
@@ -40,6 +44,7 @@ export function RuntimePairingGeneratorForm({
   runtimePairingUrl,
   copiedTarget,
   generatedAddress,
+  relayInviteExpiresAt,
   onIntentChange,
   onSelectedAddressChange,
   onRefreshNetworkInterfaces,
@@ -50,93 +55,31 @@ export function RuntimePairingGeneratorForm({
     value: networkInterface.address,
     label: `${networkInterface.name} (${networkInterface.address})`
   }))
-  const generatedIsCurrent = generatedAddress === selectedAddress
-  const staleGeneratedLink = generatedAddress !== null && !generatedIsCurrent
+  const authStatus = useAppStore((state) => state.orcaProfileAuthStatus)
+  const viaRelay = intent === 'relay'
+  const generatedViaRelay = relayInviteExpiresAt !== null
+  // Why: a Relay link is not tied to the picked address, and neither kind stands in for the other.
+  const generatedIsCurrent =
+    generatedAddress !== null &&
+    generatedViaRelay === viaRelay &&
+    (viaRelay || generatedAddress === selectedAddress)
+  const staleGeneratedLink =
+    generatedAddress !== null && !viaRelay && !generatedViaRelay && !generatedIsCurrent
   const customAddressResult =
     intent === 'custom' ? parseServerShareAddress(selectedAddress) : { ok: true as const }
   const customAddressInvalid = selectedAddress !== '' && !customAddressResult.ok
-  const canGenerate = selectedAddress !== '' && (intent !== 'custom' || customAddressResult.ok)
+  const canGenerate = viaRelay
+    ? isRuntimeRelayShareReady(authStatus)
+    : selectedAddress !== '' && (intent !== 'custom' || customAddressResult.ok)
 
   return (
     <>
       <div className="space-y-3">
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">
-            {translate(
-              'auto.components.settings.RuntimePairingUrlGenerator.intentQuestion',
-              'Where will this link be opened?'
-            )}
-          </legend>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {(
-              [
-                [
-                  'another',
-                  translate(
-                    'auto.components.settings.RuntimePairingUrlGenerator.anotherDevice',
-                    'Another device'
-                  ),
-                  translate(
-                    'auto.components.settings.RuntimePairingUrlGenerator.anotherDeviceHelp',
-                    'Tailscale, LAN, or another reachable address'
-                  )
-                ],
-                [
-                  'local',
-                  translate(
-                    'auto.components.settings.RuntimePairingUrlGenerator.localOnly',
-                    'This computer only'
-                  ),
-                  translate(
-                    'auto.components.settings.RuntimePairingUrlGenerator.localOnlyHelp',
-                    'A browser or Orca client on this computer'
-                  )
-                ],
-                [
-                  'custom',
-                  translate(
-                    'auto.components.settings.RuntimePairingUrlGenerator.customAddress',
-                    'Custom address'
-                  ),
-                  translate(
-                    'auto.components.settings.RuntimePairingUrlGenerator.customAddressHelp',
-                    'SSH tunnel, reverse proxy, or custom hostname'
-                  )
-                ]
-              ] as const
-            ).map(([value, label, description]) => (
-              <label
-                key={value}
-                className="flex cursor-pointer gap-2 rounded-md border border-border p-3 has-[:checked]:border-ring has-[:checked]:ring-1 has-[:checked]:ring-ring"
-              >
-                <input
-                  type="radio"
-                  name="runtime-pairing-intent"
-                  value={value}
-                  checked={intent === value}
-                  onChange={() => onIntentChange(value)}
-                  className="mt-0.5"
-                />
-                <span className="space-y-1">
-                  <span className="block text-xs font-medium">
-                    {label}
-                    {value === 'another' ? (
-                      <span className="ml-1.5 text-[11px] text-muted-foreground">
-                        {translate(
-                          'auto.components.settings.RuntimePairingUrlGenerator.recommended',
-                          'Recommended'
-                        )}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="block text-[11px] text-muted-foreground">{description}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <RuntimePairingIntentPicker intent={intent} onIntentChange={onIntentChange} />
 
-        {intent === 'local' ? (
+        {viaRelay ? (
+          <RuntimeRelaySharePanel authStatus={authStatus} />
+        ) : intent === 'local' ? (
           <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs">
             <div className="font-medium">
               {translate(
@@ -328,7 +271,7 @@ export function RuntimePairingGeneratorForm({
         </div>
       </div>
 
-      {generatedIsCurrent && webClientUrl ? (
+      {viaRelay ? null : generatedIsCurrent && webClientUrl ? (
         <GeneratedUrlRow
           label={translate(
             'auto.components.settings.RuntimePairingUrlGenerator.6b9ca3e69b',
@@ -361,10 +304,23 @@ export function RuntimePairingGeneratorForm({
             'auto.components.settings.RuntimePairingUrlGenerator.2e5c4e3c93',
             'Pair another Orca client'
           )}
-          description={translate(
-            'auto.components.settings.RuntimePairingUrlGenerator.849825e829',
-            'Paste this pairing URL into another Orca client.'
-          )}
+          description={
+            relayInviteExpiresAt !== null
+              ? translate(
+                  'auto.components.settings.RuntimePairingUrlGenerator.relayLinkHelp',
+                  'Paste this pairing URL into Orca on the other computer before {{time}}. It works once.',
+                  {
+                    time: new Date(relayInviteExpiresAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  }
+                )
+              : translate(
+                  'auto.components.settings.RuntimePairingUrlGenerator.849825e829',
+                  'Paste this pairing URL into another Orca client.'
+                )
+          }
           value={runtimePairingUrl}
           copied={copiedTarget === 'pairing'}
           onCopy={() => onCopy('pairing', runtimePairingUrl)}

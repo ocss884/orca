@@ -15,7 +15,7 @@ export type RpcCallerScope =
   /** `delegated`: a phone a paired desktop holds a child device for; it reaches no further than that
    *  desktop, which is never granted `pairing-admin`. */
   | { kind: 'mobile'; delegated?: boolean }
-  | { kind: 'runtime-paired'; grants: readonly RuntimeDeviceGrant[] }
+  | { kind: 'runtime-paired'; grants: readonly RuntimeDeviceGrant[]; relaySelfManagement?: boolean }
 
 export const OWNER_RPC_CALLER_SCOPE: RpcCallerScope = { kind: 'owner' }
 
@@ -51,6 +51,13 @@ export function denyRpcMethodForCaller(
       : null
   }
   if (scope.kind === 'owner' || permission === undefined) {
+    return null
+  }
+  // These methods act only on the E2EE-bound device, never on a caller-selected identity.
+  if (
+    scope.relaySelfManagement &&
+    (methodName === 'pairing.getEndpoints' || methodName === 'pairing.provisionRelay')
+  ) {
     return null
   }
   return !RUNTIME_PAIRED_STANDARD.has(permission) &&

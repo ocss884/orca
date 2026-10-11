@@ -29,6 +29,7 @@ import {
   sendRemoteRuntimeSharedControlRequestAbortable
 } from './runtime-environment-abortable-requests'
 import { subscribeRemoteRuntimeSharedControlRequest } from './runtime-environment-request-connections'
+import { getRuntimeEnvironmentConnectPairing } from './runtime-environment-relay-route'
 
 type SupportRoute = {
   environment: KnownRuntimeEnvironment
@@ -192,7 +193,7 @@ export async function routeRuntimeEnvironmentCallBySupport(args: {
     if (revisionFailure) {
       return revisionFailure
     }
-    const pairing = getPreferredPairingOffer(environment)
+    const pairing = getRuntimeEnvironmentConnectPairing(args.userDataPath, environment)
     const outcome = await waitForPromiseWithSignal(
       supportsSharedControl(args.userDataPath, environment, pairing, args.timeoutMs),
       args.signal
@@ -224,7 +225,7 @@ export async function routeRuntimeEnvironmentSubscriptionBySupport<TSubscription
   supported: (route: SupportRoute) => Promise<TSubscription>
   unsupported: (route: SupportRoute) => Promise<TSubscription>
 }): Promise<{ subscription: TSubscription; outcome: SupportRoute['outcome'] }> {
-  const pairing = getPreferredPairingOffer(args.environment)
+  const pairing = getRuntimeEnvironmentConnectPairing(args.userDataPath, args.environment)
   const outcome = await waitForPromiseWithSignal(
     supportsSharedControl(args.userDataPath, args.environment, pairing, args.timeoutMs),
     args.signal

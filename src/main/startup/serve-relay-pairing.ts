@@ -1,9 +1,13 @@
+import { createServeRelayPairingOffer } from './serve-runtime-relay-pairing'
 import { isAbsolute } from 'node:path'
 import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { writeSecureJsonFile } from '../../shared/secure-file'
 import type { ServeOptions } from './serve-options'
 
-type PairingServer = Pick<OrcaRuntimeRpcServer, 'createPairingOffer' | 'createMobilePairingOffer'>
+type PairingServer = Pick<
+  OrcaRuntimeRpcServer,
+  'createPairingOffer' | 'createMobilePairingOffer' | 'createRuntimeRelayPairingOffer'
+>
 
 export async function createServePairingOffer(
   server: PairingServer,
@@ -18,7 +22,14 @@ export async function createServePairingOffer(
     } as const
   }
   const name = `${options.mobilePairing ? 'Mobile' : 'CLI'} ${new Date().toLocaleDateString()}`
-  if (env.ORCA_SELFHOST_RELAY_PAIRING === '1') {
+  if (options.relay && !options.mobilePairing) {
+    return createServeRelayPairingOffer(server, {
+      address: options.pairingAddress,
+      name,
+      grants: options.grantDesktopControl ? ['desktop-control'] : []
+    })
+  }
+  if (options.relay || env.ORCA_SELFHOST_RELAY_PAIRING === '1') {
     if (!options.mobilePairing) {
       throw new Error('ORCA_SELFHOST_RELAY_PAIRING requires --mobile-pairing')
     }
@@ -31,7 +42,8 @@ export async function createServePairingOffer(
   return server.createPairingOffer({
     address: options.pairingAddress,
     name,
-    scope: options.mobilePairing ? 'mobile' : 'runtime'
+    scope: options.mobilePairing ? 'mobile' : 'runtime',
+    grants: options.grantDesktopControl ? ['desktop-control'] : []
   })
 }
 
@@ -42,12 +54,12 @@ export function persistServeRelayPairing(
   runtimeId: string,
   env = process.env
 ): void {
-  const file = env.ORCA_SELFHOST_PAIRING_FILE
-  if (env.ORCA_SELFHOST_RELAY_PAIRING !== '1' || !file) {
+  const file = env.ORCA_PAIRING_FILE ?? env.ORCA_SELFHOST_PAIRING_FILE
+  if (!file) {
     return
   }
   if (!isAbsolute(file)) {
-    throw new Error('ORCA_SELFHOST_PAIRING_FILE must be absolute')
+    throw new Error('ORCA_PAIRING_FILE must be absolute')
   }
   // Keep unavailable results too, so an old invite is never mistaken for current readiness.
   if (!writeSecureJsonFile(file, { runtimeId, generatedAt: Date.now(), pairing })) {
@@ -62,8 +74,7 @@ export function registerServeRelayPairingRefresh(
 ): void {
   if (
     process.platform === 'win32' ||
-    process.env.ORCA_SELFHOST_RELAY_PAIRING !== '1' ||
-    !process.env.ORCA_SELFHOST_PAIRING_FILE ||
+    !(process.env.ORCA_PAIRING_FILE ?? process.env.ORCA_SELFHOST_PAIRING_FILE) ||
     options.noPairing
   ) {
     return

@@ -147,7 +147,12 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
     const callerScope: RpcCallerScope =
       device.scope === 'mobile'
         ? { kind: 'mobile', delegated: device.parentDeviceId !== undefined }
-        : { kind: 'runtime-paired', grants: device.grants ?? [] }
+        : {
+            kind: 'runtime-paired',
+            grants: device.grants ?? [],
+            relaySelfManagement:
+              !!authenticatedSocket && this.deviceRegistry?.isRelayEnabled(device.deviceId) === true
+          }
 
     // Why: relayed calls skip this dispatcher's scope check, so only allowlisted methods may relay.
     if (device.scope === 'mobile' && MOBILE_RPC_METHOD_ALLOWLIST.has(request.method)) {
@@ -222,12 +227,12 @@ export class RuntimeRpcWebSocketDispatch extends RuntimeRpcMobileDevices {
         clientKind: device.scope,
         callerScope,
         clientCapabilities: authenticatedSocket?.clientCapabilities,
-        updateClientCapabilities:
-          authenticatedSocket && device.scope === 'mobile'
-            ? (clientCapabilities) => {
-                authenticatedSocket.clientCapabilities = clientCapabilities
-              }
-            : undefined,
+        // Why: runtime clients declare capabilities in legacy auth, which E2EE v2 (Relay) cannot carry.
+        updateClientCapabilities: authenticatedSocket
+          ? (clientCapabilities) => {
+              authenticatedSocket.clientCapabilities = clientCapabilities
+            }
+          : undefined,
         pairing: pairingContext,
         mobileRelayHosts: this.mobileRelayHostCatalog ?? undefined,
         delegatedMobileDevices:

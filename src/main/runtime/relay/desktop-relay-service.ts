@@ -148,11 +148,8 @@ export class DesktopRelayService {
     context: MobilePairingConnectionContext,
     params: PairingGetEndpointsParams
   ): Promise<PairingGetEndpointsResult> {
-    this.requireMobileDevice(context.deviceId)
-    if (
-      this.runtimeRpc.getDeviceRegistry()?.getMobilePairingConnectionMode(context.deviceId) ===
-      'local-only'
-    ) {
+    this.requireRelayDevice(context.deviceId)
+    if (!this.runtimeRpc.getDeviceRegistry()?.isRelayEnabled(context.deviceId)) {
       return { v: 1, relay: null }
     }
     return await this.withTransientDemand(`endpoints:${context.deviceId}`, async () => {
@@ -190,11 +187,9 @@ export class DesktopRelayService {
     context: MobilePairingConnectionContext,
     params: PairingProvisionRelayParams
   ): Promise<DeviceCredentialInstalled> {
-    this.requireMobileDevice(context.deviceId)
-    if (
-      this.runtimeRpc.getDeviceRegistry()?.getMobilePairingConnectionMode(context.deviceId) ===
-      'local-only'
-    ) {
+    const device = this.runtimeRpc.getDeviceRegistry()?.getDevice(context.deviceId)
+    this.requireRelayDevice(context.deviceId)
+    if (!this.runtimeRpc.getDeviceRegistry()?.isRelayEnabled(context.deviceId)) {
       throw new Error('relay_disabled_for_device')
     }
     return await this.withTransientDemand(`provision:${context.deviceId}`, async () => {
@@ -209,17 +204,29 @@ export class DesktopRelayService {
         // repurposed as either of the two initial-install authorization modes.
         throw new Error('relay_provision_authorization_unavailable')
       }
-      if (
-        !this.runtimeRpc.setMobileRelayBinding(context.deviceId, {
-          relayHostId: broker.hostId,
-          relayDeviceId: context.deviceId,
-          ownerIdentityKey: broker.ownerIdentityKey
-        })
-      ) {
-        throw new Error('mobile_device_not_found')
+      const binding = {
+        relayHostId: broker.hostId,
+        relayDeviceId: context.deviceId,
+        ownerIdentityKey: broker.ownerIdentityKey
+      }
+      const installed = await broker.installCredential(context.deviceId, params, authorization)
+      // Keep the invite expiry until cloud installation succeeds; failed attempts create no standing demand.
+      try {
+        const registry = this.runtimeRpc.getDeviceRegistry()
+        if (
+          !device ||
+          registry?.getDevice(context.deviceId)?.token !== device.token ||
+          !registry.isRelayEnabled(context.deviceId) ||
+          !this.runtimeRpc.setDeviceRelayBinding(context.deviceId, binding)
+        ) {
+          throw new Error('relay_disabled_for_device')
+        }
+      } catch (error) {
+        this.onDeviceRevokeQueued(this.revokeOutbox.enqueue(binding))
+        throw error
       }
       this.refreshDemand()
-      return await broker.installCredential(context.deviceId, params, authorization)
+      return installed
     })
   }
 
@@ -246,8 +253,9 @@ export class DesktopRelayService {
     }
   }
 
-  private requireMobileDevice(deviceId: string): void {
-    if (this.runtimeRpc.getDeviceRegistry()?.getDevice(deviceId)?.scope !== 'mobile') {
+  private requireRelayDevice(deviceId: string): void {
+    // Why: phones read this code over the wire, so it keeps its mobile-era name.
+    if (!this.runtimeRpc.getDeviceRegistry()?.getDevice(deviceId)) {
       throw new Error('mobile_device_not_found')
     }
   }

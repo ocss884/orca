@@ -103,11 +103,13 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
     const noPairing = flags.get('no-pairing') === true
     const mobilePairing = flags.get('mobile-pairing') === true
     const grantDesktopControl = flags.get('grant-desktop-control') === true
+    const relay = flags.get('relay') === true
     const recipeJson = flags.get('recipe-json') === true
     const validationError = getServeOptionValidationError({
       noPairing,
       mobilePairing,
       grantDesktopControl,
+      relay,
       recipeJson,
       projectRoot
     })
@@ -123,6 +125,7 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
       noPairing,
       mobilePairing,
       grantDesktopControl,
+      relay,
       recipeJson,
       projectRoot
     })

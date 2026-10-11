@@ -114,7 +114,12 @@ export function serveOrcaApp(args: ServeOrcaAppArgs = {}): Promise<number> {
   // Why one value: the selector, orcad and Electron must all serve the profile the caller chose.
   const userDataPath = resolveLaunchUserDataPath()
   // Why synchronous on the opt-out: it must spawn Electron exactly as before, without asking.
-  if (process.env[SERVE_RUNTIME_ENV] === SERVE_RUNTIME_ELECTRON) {
+  // orcad has no account-backed Relay provider yet. Keep Relay on the existing Electron host.
+  if (
+    args.relay ||
+    process.env.ORCA_SELFHOST_RELAY_PAIRING === '1' ||
+    process.env[SERVE_RUNTIME_ENV] === SERVE_RUNTIME_ELECTRON
+  ) {
     return serveWithElectron(executable, args, userDataPath)
   }
   return serveWithSelectedRuntime(executable, args, userDataPath)

@@ -5,8 +5,8 @@ import { pathToFileURL } from 'node:url'
 
 export async function loginSelfhostRelay(env = process.env, request = fetch) {
   const origin = env.ORCA_CLOUD_API_URL
-  const passwordFile = env.ORCA_SELFHOST_PASSWORD_FILE
-  const output = env.ORCA_SELFHOST_SESSION_FILE
+  const passwordFile = env.ORCA_RELAY_PASSWORD_FILE ?? env.ORCA_SELFHOST_PASSWORD_FILE
+  const output = env.ORCA_RELAY_SESSION_FILE ?? env.ORCA_SELFHOST_SESSION_FILE
   if (!origin || new URL(origin).protocol !== 'https:' || new URL(origin).origin !== origin) {
     throw new Error('ORCA_CLOUD_API_URL must be an HTTPS origin')
   }
@@ -18,7 +18,7 @@ export async function loginSelfhostRelay(env = process.env, request = fetch) {
     passwordFile === output
   ) {
     throw new Error(
-      'Set distinct absolute ORCA_SELFHOST_PASSWORD_FILE and ORCA_SELFHOST_SESSION_FILE paths'
+      'Set distinct absolute ORCA_RELAY_PASSWORD_FILE and ORCA_RELAY_SESSION_FILE paths'
     )
   }
   const stat = await lstat(passwordFile)

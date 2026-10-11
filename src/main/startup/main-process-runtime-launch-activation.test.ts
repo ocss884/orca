@@ -285,6 +285,7 @@ describe('desktop startup activation', () => {
       noPairing: true,
       mobilePairing: false,
       grantDesktopControl: false,
+      relay: false,
       recipeJson: false,
       projectRoot: null
     })

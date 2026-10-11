@@ -69,6 +69,7 @@ describe('orca cli worktree awareness', () => {
       noPairing: true,
       mobilePairing: false,
       grantDesktopControl: false,
+      relay: false,
       recipeJson: false,
       projectRoot: null
     })
@@ -99,6 +100,25 @@ describe('orca cli worktree awareness', () => {
       noPairing: false,
       mobilePairing: true,
       grantDesktopControl: false,
+      relay: false,
+      recipeJson: false,
+      projectRoot: null
+    })
+  })
+
+  it('starts a foreground headless server with Relay pairing enabled', async () => {
+    serveOrcaAppMock.mockResolvedValue(0)
+
+    await main(['serve', '--relay', '--json'], '/tmp/repo')
+
+    expect(serveOrcaAppMock).toHaveBeenCalledWith({
+      json: true,
+      port: null,
+      pairingAddress: null,
+      noPairing: false,
+      mobilePairing: false,
+      relay: true,
+      grantDesktopControl: false,
       recipeJson: false,
       projectRoot: null
     })
@@ -126,6 +146,7 @@ describe('orca cli worktree awareness', () => {
       noPairing: false,
       mobilePairing: false,
       grantDesktopControl: false,
+      relay: false,
       recipeJson: true,
       projectRoot: '/workspace/repo'
     })
